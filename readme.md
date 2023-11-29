@@ -1,3 +1,1 @@
-how to use:
-
-make an commit
+Fuck git
