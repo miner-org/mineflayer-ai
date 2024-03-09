@@ -13,6 +13,6 @@
   "license": "ISC",
   "dependencies": {
     "@brain/rl": "^0.0.3",
-    "mineflayer": "^4.14.0"
+    "mineflayer": "^4.0.0"
   }
 }
