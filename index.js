@@ -1,17 +1,32 @@
 const mineflayer = require("mineflayer");
-const config = require("./config.json")
+const config = require("./config.json");
+const { extractStrings } = require("./utils");
+require("dotenv").config();
 
 let spawned = false;
+let currentReward = false;
+let previousTarget;
+let target;
 
-const actionList = {
+const actionIDs = {
   attack: "attack",
   move: {
-    forward: "forward",
-    back: "back",
-    left: "left",
-    right: "right"
+    start: {
+      forward: "forward start",
+      back: "back start",
+      left: "left start",
+      right: "right start"
+    },
+    stop: {
+      forward: "forward stop",
+      back: "back stop",
+      left: "left stop",
+      right: "right stop"
+    }
   }
 };
+
+const actionList = extractStrings(actionIDs);
 
 const bot = mineflayer.createBot({
   username: config.mineflayer.username,
@@ -21,9 +36,8 @@ const bot = mineflayer.createBot({
 });
 
 function getState(bot, opponent) {
-  // Extract relevant information
   const targHealth = opponent.health || 0;
-  const targDist = bot.entity.position.distanceTo(opponent.entity.position);
+  const targDist = bot.entity.position.distanceTo(opponent.position);
 
   const botPosx = bot.entity.position.x
   const botPosy = bot.entity.position.y
@@ -53,10 +67,15 @@ const explorationRate = 0.1;
 function chooseAction(state) {
   if (Math.random() < explorationRate || !qTable[state]) {
     // Explore (random action)
-    return Math.random() < 0.5 ? actionList.attack : actionList.move.forward;
+    return actionList[Math.floor(Math.random())];
   } else {
     // Exploit (choose action with the highest Q-value)
-    return qTable[state][actionList.attack] > qTable[state][actionList.move.forward] ? actionList.attack : actionList.move.forward;
+    const attack = qTable[state][actionIDs.attack];
+    const moveForward = qTable[state][actionIDs.move.start.forward];
+
+    console.clear()
+    console.log(qTable)
+    return attack > moveForward ? actionIDs.attack : actionIDs.move.start.forward;
   }
 }
 
@@ -66,7 +85,7 @@ function updateQValues(state, action, reward, nextState) {
   if (!qTable[nextState]) qTable[nextState] = { attack: 0, forward: 0 };
 
   const currentQValue = qTable[state][action];
-  const maxNextQValue = Math.max(qTable[nextState][action], qTable[nextState][actionList.move.forward]);
+  const maxNextQValue = Math.max(qTable[nextState][action], qTable[nextState][actionIDs.move.start.forward]);
 
   const newQValue = currentQValue + learningRate * (reward + discountFactor * maxNextQValue - currentQValue);
   qTable[state][action] = newQValue;
@@ -75,40 +94,53 @@ function updateQValues(state, action, reward, nextState) {
 // Training loop
 bot.on("physicTick", () => {
   if (!spawned) return;
-  // Your PvP logic and actions here
-  const target = bot.nearestEntity(entity => entity.type.toLowerCase() === "player");
+  previousTarget = target;
+  target = bot.nearestEntity(entity => entity.type.toLowerCase() === "player");
 
-  if (target) {
-    // Obtain current state
-    const currentState = getState(bot, target);
+  if (!target) return;
 
-    // Choose action
-    const action = chooseAction(currentState);
+  // Obtain current state
+  const currentState = getState(bot, target);
 
-    // Perform action and obtain reward
-    const reward = performAction(bot, action, target);
+  // Choose action
+  const action = chooseAction(currentState);
 
-    // Obtain new state after the action
-    const nextState = getState(bot, target);
+  // Perform action and obtain reward
+  const reward = performAction(bot, action, target);
 
-    // Update Q-values using Q-learning
-    updateQValues(currentState, action, reward, nextState);
-  }
+  // Obtain new state after the action
+  const nextState = getState(bot, target);
+
+  // Update Q-values using Q-learning
+  updateQValues(currentState, action, reward, nextState);
 });
 
 // Function to perform actions (attack, forward)
-function performAction(bot, desiredAction, target) {
-  // Implement your action logic here
-  if (desiredAction == actionList.attack) {
-    bot.lookAt(target.position)
-    bot.attack(target)
-  } else if (desiredAction == actionList.move.forward) {
-    bot.setControlState("forward", true)
-  }
+async function performAction(bot, desiredAction, target) {
+  currentReward = false
 
-  // Simulate PvP actions and return a reward
-  return Math.random() > 0.5 ? 1 : -1;
+  if (desiredAction == actionIDs.attack) {
+    await bot.lookAt(target.position)
+    bot.attack(target)
+  } else if (desiredAction == actionIDs.move.start.forward) {
+    bot.setControlState("forward", true)
+  } else if (desiredAction == actionIDs.move.start.back) {
+    bot.setControlState("backwards", true)
+  } else if (desiredAction == actionIDs.move.start.left) {
+    bot.setControlState("left", true)
+  } else if (desiredAction == actionIDs.move.start.right) {
+    bot.setControlState("right", true)
+  }
+  return currentReward;
 }
+
+bot.on("entityCriticalEffect", (entity) => {
+  if (entity == target) currentReward = currentReward + config.rewards.crit
+});
+
+bot.on("entityDead", (entity) => {
+  if (entity == target || entity == previousTarget) currentReward = currentReward + config.rewards.crit
+});
 
 // Handle bot events
 bot.on("spawn", () => {
@@ -130,9 +162,9 @@ bot.on("message", (msg) => {
 
   if (msg.includes("register")) {
     console.log("Registered")
-    bot.chat("/register EDPN5000")
+    bot.chat(`/register ${process.env.PASSWORD}`)
   } else if (msg.includes("login")) {
     console.log("Logged in")
-    bot.chat("/login EDPN5000")
+    bot.chat(`/login ${process.env.PASSWORD}`)
   }
 });

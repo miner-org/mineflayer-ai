@@ -1,4 +1,7 @@
 {
+  "rewards": {
+    "crit":2
+  },
   "mineflayer": {
     "username": "MonkeBot",
     "host": "node2.meowbot.de",

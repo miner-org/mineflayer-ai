@@ -13,6 +13,8 @@
   "license": "ISC",
   "dependencies": {
     "@brain/rl": "^0.0.3",
+    "child_process": "^1.0.2",
+    "dotenv": "^16.4.5",
     "mineflayer": "^4.0.0"
   }
 }
