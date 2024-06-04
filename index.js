@@ -1,30 +1,35 @@
 const mineflayer = require("mineflayer");
 const config = require("./config.json");
-const { extractStrings } = require("./utils");
+const { extractStrings, getKeys, getStartingValues, sleep } = require("./utils");
 require("dotenv").config();
 
 let spawned = false;
 let currentReward = false;
 let previousTarget;
+let previousDistance = 0;
 let target;
+let targetDistance;
 
 const actionIDs = {
   attack: "attack",
+  lookAtTarget: "lookTarget",
   move: {
     start: {
-      forward: "forward start",
-      back: "back start",
-      left: "left start",
-      right: "right start"
+      startJump: "jumpStart",
+      startForward: "forwardStart",
+      startBack: "backStart",
+      startLeft: "leftStart",
+      startRight: "rightStart"
     },
     stop: {
-      forward: "forward stop",
-      back: "back stop",
-      left: "left stop",
-      right: "right stop"
+      stopJump: "jumpStop",
+      stopForward: "forwardStop",
+      stopBack: "backStop",
+      stopLeft: "leftStop",
+      stopRight: "rightStop"
     }
   }
-};
+}; // add here
 
 const actionList = extractStrings(actionIDs);
 
@@ -37,7 +42,6 @@ const bot = mineflayer.createBot({
 
 function getState(bot, opponent) {
   const targHealth = opponent.health || 0;
-  const targDist = bot.entity.position.distanceTo(opponent.position);
 
   const botPosx = bot.entity.position.x
   const botPosy = bot.entity.position.y
@@ -46,7 +50,8 @@ function getState(bot, opponent) {
 
   return {
     targHealth,
-    targDist,
+    targDist: targetDistance,
+    previousDist: previousDistance,
 
     botPosx,
     botPosy,
@@ -56,7 +61,7 @@ function getState(bot, opponent) {
 }
 
 // Q-table for storing Q-values
-const qTable = {};
+let qTable = {};
 
 // Parameters
 const learningRate = 0.1;
@@ -70,34 +75,49 @@ function chooseAction(state) {
     return actionList[Math.floor(Math.random())];
   } else {
     // Exploit (choose action with the highest Q-value)
-    const attack = qTable[state][actionIDs.attack];
-    const moveForward = qTable[state][actionIDs.move.start.forward];
-
+    
     console.clear()
-    console.log(qTable)
-    return attack > moveForward ? actionIDs.attack : actionIDs.move.start.forward;
+    let maxQValue = -Infinity;
+    let bestAction;
+    for (const action in qTable[state]) {
+      if (qTable[state][action] > maxQValue) {
+        maxQValue = qTable[state][action];
+        bestAction = action;
+      }
+    }
+
+    console.log(qTable[state], bestAction)
+    return bestAction;
   }
 }
 
 // Update Q-values using Q-learning
 function updateQValues(state, action, reward, nextState) {
-  if (!qTable[state]) qTable[state] = { attack: 0, forward: 0 };
-  if (!qTable[nextState]) qTable[nextState] = { attack: 0, forward: 0 };
+  const startingValues = getStartingValues(getKeys(actionIDs));
+
+  if (!qTable[state]) qTable[state] = startingValues;
+  if (!qTable[nextState]) qTable[nextState] = startingValues;
 
   const currentQValue = qTable[state][action];
-  const maxNextQValue = Math.max(qTable[nextState][action], qTable[nextState][actionIDs.move.start.forward]);
+  const maxNextQValue = Math.max(...Object.values(qTable[nextState]));
 
   const newQValue = currentQValue + learningRate * (reward + discountFactor * maxNextQValue - currentQValue);
   qTable[state][action] = newQValue;
 }
 
 // Training loop
-bot.on("physicTick", () => {
+bot.on("physicTick", async () => {
   if (!spawned) return;
-  previousTarget = target;
-  target = bot.nearestEntity(entity => entity.type.toLowerCase() === "player");
+
+  const newTarget = bot.nearestEntity(entity => entity.type.toLowerCase() === "player");
+  if (target !== newTarget) {
+    previousTarget = target
+    target = bot.nearestEntity(entity => entity.type.toLowerCase() === "player");
+  }
 
   if (!target) return;
+  targetDistance = Math.round(bot.entity.position.distanceTo(target.position));
+  previousDistance = targetDistance;
 
   // Obtain current state
   const currentState = getState(bot, target);
@@ -106,7 +126,7 @@ bot.on("physicTick", () => {
   const action = chooseAction(currentState);
 
   // Perform action and obtain reward
-  const reward = performAction(bot, action, target);
+  const reward = await performAction(bot, action, target);
 
   // Obtain new state after the action
   const nextState = getState(bot, target);
@@ -116,35 +136,67 @@ bot.on("physicTick", () => {
 });
 
 // Function to perform actions (attack, forward)
-async function performAction(bot, desiredAction, target) {
-  currentReward = false
-
+async function performAction(bot, desiredAction, target) { // add here
   if (desiredAction == actionIDs.attack) {
-    await bot.lookAt(target.position)
-    bot.attack(target)
-  } else if (desiredAction == actionIDs.move.start.forward) {
+    if (Math.round(bot.entity.position.distanceTo(target.position)) < config.combat.reach) {
+      await bot.lookAt(target.position.offset(0, target.height, 0), true);
+      bot.attack(target);
+    } else {
+      return 0;
+    }
+  } else if (desiredAction == actionIDs.lookAtTarget) {
+    await bot.lookAt(target.position.offset(0, target.height, 0), true)
+  } else if (desiredAction == actionIDs.move.start.startForward) {// Start movement
     bot.setControlState("forward", true)
-  } else if (desiredAction == actionIDs.move.start.back) {
+  } else if (desiredAction == actionIDs.move.start.startBack) {
     bot.setControlState("backwards", true)
-  } else if (desiredAction == actionIDs.move.start.left) {
+  } else if (desiredAction == actionIDs.move.start.startLeft) {
     bot.setControlState("left", true)
-  } else if (desiredAction == actionIDs.move.start.right) {
+  } else if (desiredAction == actionIDs.move.start.startRight) {
     bot.setControlState("right", true)
+  } else if (desiredAction == actionIDs.move.stop.stopForward) {// Stop movement
+    bot.setControlState("forward", true)
+  } else if (desiredAction == actionIDs.move.stop.stopBack) {
+    bot.setControlState("backwards", true)
+  } else if (desiredAction == actionIDs.move.stop.stopLeft) {
+    bot.setControlState("left", true)
+  } else if (desiredAction == actionIDs.move.stop.stopRight) {
+    bot.setControlState("right", true)
+  } else if (desiredAction == actionIDs.move.start.startJump) {
+    bot.setControlState("jump", true)
+  } else if (desiredAction == actionIDs.move.stop.stopJump) {
+    bot.setControlState("jump", false)
   }
-  return currentReward;
+
+  async function loop() {
+    if (currentReward !== false) {
+      currentReward = false;
+      if (targetDistance > previousDistance) currentReward = currentReward + config.rewards.closerReward;
+      return currentReward;
+    } else {
+      await sleep(2)
+      loop()
+    }
+  }
+
+  return await loop()
 }
 
 bot.on("entityCriticalEffect", (entity) => {
-  if (entity == target) currentReward = currentReward + config.rewards.crit
+  if (entity == target || entity == previousTarget) currentReward = currentReward + config.rewards.crit;
 });
 
 bot.on("entityDead", (entity) => {
-  if (entity == target || entity == previousTarget) currentReward = currentReward + config.rewards.crit
+  if (entity == target || entity == previousTarget) currentReward = currentReward + config.rewards.kill;
+});
+
+bot.on("entityHurt", (entity) => {
+  if (entity == target || entity == previousTarget) currentReward = currentReward + config.rewards.damage
 });
 
 // Handle bot events
 bot.on("spawn", () => {
-  console.log("Bot spawned in");
+  console.log("Bot spawned");
   spawned = true;
 });
 

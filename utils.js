@@ -81,7 +81,7 @@ function summon(pos, entity) {
 }
 
 function extractStrings(obj) {
-  const strings = [];
+  let strings = [];
 
   function traverse(obj) {
     for (const key in obj) {
@@ -97,6 +97,35 @@ function extractStrings(obj) {
   return strings;
 }
 
+function getKeys(obj) {
+  let keys = [];
+
+  function recurse(current) {
+    if (typeof current === "object" && current !== null) {
+      for (let key in current) {
+        if (typeof current[key] === "object") {
+          recurse(current[key]);
+        } else {
+          keys.push(key);
+        }
+      }
+    }
+  }
+
+  recurse(obj);
+  return keys;
+}
+
+function getStartingValues(keys) {
+  let result = {};
+
+  keys.forEach(key => {
+    result[key] = 0;
+  });
+
+  return result;
+}
+
 module.exports = {
   debounce,
   toMs,
@@ -109,4 +138,6 @@ module.exports = {
   getAllCrystals,
   setBlock,
   summon,
+  getKeys,
+  getStartingValues
 }
