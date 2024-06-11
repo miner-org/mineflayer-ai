@@ -20,6 +20,7 @@
   },
   "homepage": "https://github.com/CubeBeveled/mineflayer-ai#readme",
   "dependencies": {
-    "@tensorflow/tfjs": "^4.20.0"
+    "@tensorflow/tfjs": "^4.20.0",
+    "mineflayer": "^4.20.1"
   }
 }

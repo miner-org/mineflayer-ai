@@ -1,0 +1,13 @@
+{
+  "rewards": {
+    "damage": 0.5,
+    "crit": 2,
+    "kill": 5,
+    "closerReward": 0.5
+  },
+  "mineflayer": {
+    "username": "MonkeBot",
+    "host": "de3.plutonodes.com",
+    "port": 25022
+  }
+}

@@ -1,7 +1,8 @@
-// qlearning.js
-const tf = require('@tensorflow/tfjs');
+// pvp_agent.js
+const tf = require("@tensorflow/tfjs");
+const { actions, getState } = require("./actions");
 
-class QLearningAgent {
+class PVPRLAgent {
   constructor(stateSize, actionSize) {
     this.stateSize = stateSize;
     this.actionSize = actionSize;
@@ -16,10 +17,10 @@ class QLearningAgent {
 
   buildModel() {
     const model = tf.sequential();
-    model.add(tf.layers.dense({ inputShape: [this.stateSize], units: 24, activation: 'relu' }));
-    model.add(tf.layers.dense({ units: 24, activation: 'relu' }));
-    model.add(tf.layers.dense({ units: this.actionSize, activation: 'linear' }));
-    model.compile({ optimizer: tf.train.adam(this.learningRate), loss: 'meanSquaredError' });
+    model.add(tf.layers.dense({ inputShape: [this.stateSize], units: 24, activation: "relu" }));
+    model.add(tf.layers.dense({ units: 24, activation: "relu" }));
+    model.add(tf.layers.dense({ units: this.actionSize, activation: "linear" }));
+    model.compile({ optimizer: tf.train.adam(this.learningRate), loss: "meanSquaredError" });
     return model;
   }
 
@@ -33,7 +34,7 @@ class QLearningAgent {
 
   async train(state, action, reward, nextState, done) {
     const target = reward + (done ? 0 : this.discountFactor * (await this.model.predict(tf.tensor2d([nextState]))).max().dataSync()[0]);
-    const targetQValues = this.model.predict(tf.tensor2d([state]));
+    const targetQValues = await this.model.predict(tf.tensor2d([state]));
     targetQValues.dataSync()[action] = target;
 
     await this.model.fit(tf.tensor2d([state]), tf.tensor2d([targetQValues.dataSync()]), { epochs: 1 });
@@ -44,4 +45,4 @@ class QLearningAgent {
   }
 }
 
-module.exports = QLearningAgent;
+module.exports = PVPRLAgent;
