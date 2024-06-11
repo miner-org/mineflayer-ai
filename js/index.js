@@ -168,18 +168,23 @@ async function performAction(bot, desiredAction, target) { // add here
     bot.setControlState("jump", false)
   }
 
-  async function loop() {
-    if (currentReward !== false) {
-      currentReward = false;
-      if (targetDistance > previousDistance) currentReward = currentReward + config.rewards.closerReward;
-      return currentReward;
-    } else {
-      await sleep(2)
-      loop()
-    }
-  }
+  return await awaitReward()
+}
 
-  return await loop()
+function awaitReward() {
+  return new Promise((resolve) => {
+    check()
+    async function check() {
+      if (currentReward !== false) {
+        currentReward = false;
+        if (targetDistance > previousDistance) currentReward = currentReward + config.rewards.closerReward;
+        resolve(currentReward);
+      } else {
+        await sleep(2)
+        check()
+      }
+    }
+  });
 }
 
 bot.on("entityCriticalEffect", (entity) => {
